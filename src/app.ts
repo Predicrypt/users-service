@@ -9,6 +9,7 @@ const app = express();
 
 app.use(cors());
 app.use(json());
+app.use(currentUser)
 
 
 if (process.env.NODE_ENV === 'dev') {
