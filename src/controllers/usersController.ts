@@ -5,10 +5,11 @@ import {
   BinanceClient,
   NoApiKeyError,
 } from '@Predicrypt/common';
+import { KeysUpdatedPublisher } from '../events/publishers/UserRegisteredPublisher';
+import { natsWrapper } from '../natsWrapper';
 
 export const getUserBalances = async (req: Request, res: Response) => {
-  const user = User.findByUserId(req.currentUser?.id!);
-  checkApiKey(user);
+  const user = await User.findOne({ userId: req.currentUser?.id! });
 
   const client = new BinanceClient(user.apiKey, user.secretKey);
   const accountBalances = await client.accountInfo({ timestamp: Date.now() });
@@ -18,9 +19,11 @@ export const getUserBalances = async (req: Request, res: Response) => {
 
 export const getTrades = async (req: Request, res: Response) => {
   const { symbol } = req.params;
-  const user = User.findByUserId(req.currentUser?.id!);
+  console.log(req.params)
+  const user = await User.findOne({ userId: req.currentUser?.id! });
 
   checkApiKey(user);
+  console.log(symbol)
   const client = new BinanceClient(user.apiKey, user.secretKey);
   const tradeList = await client.accountTradeList({
     symbol,
@@ -32,12 +35,22 @@ export const getTrades = async (req: Request, res: Response) => {
 
 export const setApiKeys = async (req: Request, res: Response) => {
   const { apiKey, secretKey } = req.body;
-  const user = await User.findByUserId(req.currentUser?.id!);
-  console.log(user)
-  user.apiKey = apiKey;
-  user.secretKey = secretKey;
+  const all = await User.find({});
+  const user = await User.findOne({ userId: req.currentUser?.id! });
+  console.log(all);
+  if (apiKey && secretKey) {
+    user.apiKey = apiKey;
+    user.secretKey = secretKey;
 
-  await user.save();
+    await user.save();
+    new KeysUpdatedPublisher(natsWrapper.client).publish({
+      userId: req.currentUser?.id!,
+      apiKey,
+      secretKey,
+    });
+  } else {
+    throw new BadRequestError('Api key or secret null');
+  }
 
   res.status(200).send({ status: 'success' });
 };
